@@ -269,3 +269,8 @@ create policy "Leer items de egresos como usuario autenticado"
 on items_egreso for select
 to authenticated
 using (auth.uid() = creado_por);
+
+
+-- Modificar el campo costo_unitario de la tabla items_ventas para que acepte NULL
+ALTER TABLE items_ventas
+ALTER COLUMN costo_unitario DROP NOT NULL;
