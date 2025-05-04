@@ -16,7 +16,7 @@ else:
     # Conexión a Supabase
     try:
         supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        st.success("Conexión a Supabase exitosa.")
+        #st.success("Conexión a Supabase exitosa.")
     except Exception as e:
         st.error(f"Error al conectar con Supabase: {e}")
 
@@ -27,10 +27,19 @@ else:
     if menu_principal == "Ventas":
         st.title("Ventas")
 
-        # Filtros de fechas
-        st.subheader("Filtrar Ventas")
-        fecha_inicio = st.date_input("Fecha de inicio")
-        fecha_fin = st.date_input("Fecha de fin")
+        # Filtros de fechas en una sola línea con ancho reducido
+        col1, col2, col3 = st.columns([2, 1, 1])  # Ajustar proporciones: col1 y col3 son más pequeñas
+        with col1:
+            col_fecha_inicio, col_fecha_fin = st.columns([1, 1])  # Dividir el espacio central en dos columnas iguales
+            with col_fecha_inicio:
+                fecha_inicio = st.date_input("Fecha de inicio")
+            with col_fecha_fin:
+                fecha_fin = st.date_input("Fecha de fin")
+        with col2:
+            st.write("")  # Espacio vacío para centrar los filtros
+        with col3:
+            st.write("")  # Espacio vacío para centrar los filtros
+
         if st.button("Aplicar Filtros"):
             try:
                 # Construir la consulta con los filtros de fechas
