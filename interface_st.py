@@ -3,152 +3,233 @@ import pandas as pd
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import os
+from datetime import date
 
 # Cargar variables de entorno
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# Verificar si las credenciales están configuradas
-if not SUPABASE_URL or not SUPABASE_KEY:
-    st.error("Error: Las credenciales de Supabase no están configuradas correctamente.")
-else:
-    # Conexión a Supabase
-    try:
-        supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        #st.success("Conexión a Supabase exitosa.")
-    except Exception as e:
-        st.error(f"Error al conectar con Supabase: {e}")
+# Conexión a Supabase
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    # Menú principal
-    st.sidebar.title("Menú")
-    menu_principal = st.sidebar.radio("", ["Ventas", "Egresos"], index=0)
+# Menú lateral
+st.sidebar.title("Menú")
+menu_principal = st.sidebar.radio("", ["Ventas", "Egresos"], index=0)
 
-    if menu_principal == "Ventas":
-        st.title("Ventas")
+if menu_principal == "Ventas":
+    st.title("Ventas")
 
-        # Filtros de fechas en una sola línea con ancho reducido
-        col1, col2, col3 = st.columns([2, 1, 1])  # Ajustar proporciones: col1 y col3 son más pequeñas
-        with col1:
-            col_fecha_inicio, col_fecha_fin = st.columns([1, 1])  # Dividir el espacio central en dos columnas iguales
-            with col_fecha_inicio:
-                fecha_inicio = st.date_input("Fecha de inicio")
-            with col_fecha_fin:
-                fecha_fin = st.date_input("Fecha de fin")
-        with col2:
-            st.write("")  # Espacio vacío para centrar los filtros
-        with col3:
-            st.write("")  # Espacio vacío para centrar los filtros
+    if st.button("Nueva Venta"):
+        st.session_state["mostrar_formulario"] = True
 
-        if st.button("Aplicar Filtros"):
-            try:
-                # Construir la consulta con los filtros de fechas
-                query = supabase.table("ventas").select("*")
-                if fecha_inicio and fecha_fin:
-                    query = query.gte("fecha_venta", fecha_inicio.strftime("%Y-%m-%d")).lte("fecha_venta", fecha_fin.strftime("%Y-%m-%d"))
-                response = query.execute()
+    if st.session_state.get("mostrar_formulario"):
+        st.subheader("Registrar nueva venta")
 
-                if response.data:
-                    ventas = pd.DataFrame(response.data)
-                    st.session_state["ventas"] = ventas  # Guardar las ventas en el estado de la sesión
-                    st.dataframe(ventas)
+        # Formulario principal para registrar la venta
+        with st.form("form_nueva_venta"):
+            # Inicializar valores en session_state si no existen
+            if "venta_data" not in st.session_state:
+                st.session_state["venta_data"] = {
+                    "fecha_venta": date.today(),
+                    "costo_envio": 0,
+                    "comision": 0,
+                    "impuestos": 0,
+                    "descuento": 0,
+                    "nombre_cliente": "",
+                    "mail_cliente": "",
+                    "telefono_cliente": "",
+                    "direccion_cliente": "",
+                    "condicion_fiscal": "",
+                    "dni_cuit": "",
+                    "facturada": False,
+                    "id_canal": None,
+                    "id_forma_pago": None,
+                    "id_forma_entrega": None,
+                }
+
+            if "productos" not in st.session_state:
+                st.session_state["productos"] = []
+
+            # Campos de la tabla ventas
+            col1, col2 = st.columns(2)
+            with col1:
+                st.session_state["venta_data"]["fecha_venta"] = st.date_input(
+                    "Fecha de la venta", value=st.session_state["venta_data"]["fecha_venta"]
+                )
+            with col2:
+                canales = supabase.table("canales_venta").select("*").execute().data
+                if canales:
+                    canal_seleccionado = st.selectbox(
+                        "Canal de venta",
+                        [(canal["id_canal"], canal["nombre_canal"]) for canal in canales],
+                        format_func=lambda x: x[1],
+                        index=0 if st.session_state["venta_data"]["id_canal"] is None else next(
+                            (i for i, canal in enumerate(canales) if canal["id_canal"] == st.session_state["venta_data"]["id_canal"]), 0
+                        ),
+                    )
+                    st.session_state["venta_data"]["id_canal"] = canal_seleccionado[0]
                 else:
-                    st.write("No se encontraron ventas con los filtros aplicados.")
-            except Exception as e:
-                st.error(f"Error al filtrar las ventas: {e}")
+                    st.warning("No hay canales de venta disponibles.")
 
-        # Listado de ventas
-        st.subheader("Listado de Ventas")
-        if "ventas" in st.session_state:
-            ventas = st.session_state["ventas"]
-            selected_index = st.selectbox("Selecciona una venta para editar o eliminar", ventas.index, format_func=lambda x: f"Venta ID: {ventas.loc[x, 'id_venta']} - {ventas.loc[x, 'nombre_cliente']}")
-        else:
-            st.write("No hay ventas cargadas.")
-
-        # Botones de acción
-        st.subheader("Acciones")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("Nueva Venta"):
-                st.session_state["accion"] = "nueva"
-        with col2:
-            if st.button("Editar Venta"):
-                if "ventas" in st.session_state and "accion" not in st.session_state:
-                    st.session_state["accion"] = "editar"
-                    st.session_state["venta_seleccionada"] = ventas.loc[selected_index]
+            col3, col4 = st.columns(2)
+            with col3:
+                formas_pago = supabase.table("forma_pago").select("*").execute().data
+                if formas_pago:
+                    forma_pago_seleccionada = st.selectbox(
+                        "Forma de pago",
+                        [(fp["id_forma_pago"], fp["forma_pago"]) for fp in formas_pago],
+                        format_func=lambda x: x[1],
+                        index=0 if st.session_state["venta_data"]["id_forma_pago"] is None else next(
+                            (i for i, fp in enumerate(formas_pago) if fp["id_forma_pago"] == st.session_state["venta_data"]["id_forma_pago"]), 0
+                        ),
+                    )
+                    st.session_state["venta_data"]["id_forma_pago"] = forma_pago_seleccionada[0]
                 else:
-                    st.warning("Selecciona una venta para editar.")
-        with col3:
-            if st.button("Eliminar Venta"):
-                if "ventas" in st.session_state and "accion" not in st.session_state:
-                    st.session_state["accion"] = "eliminar"
-                    st.session_state["venta_seleccionada"] = ventas.loc[selected_index]
+                    st.warning("No hay formas de pago disponibles.")
+            with col4:
+                formas_entrega = supabase.table("forma_entrega").select("*").execute().data
+                if formas_entrega:
+                    forma_entrega_seleccionada = st.selectbox(
+                        "Forma de entrega",
+                        [(fe["id_forma_entrega"], fe["forma_entrega"]) for fe in formas_entrega],
+                        format_func=lambda x: x[1],
+                        index=0 if st.session_state["venta_data"]["id_forma_entrega"] is None else next(
+                            (i for i, fe in enumerate(formas_entrega) if fe["id_forma_entrega"] == st.session_state["venta_data"]["id_forma_entrega"]), 0
+                        ),
+                    )
+                    st.session_state["venta_data"]["id_forma_entrega"] = forma_entrega_seleccionada[0]
                 else:
-                    st.warning("Selecciona una venta para eliminar.")
+                    st.warning("No hay formas de entrega disponibles.")
 
-        # Acciones según el botón seleccionado
-        if "accion" in st.session_state:
-            if st.session_state["accion"] == "nueva":
-                st.title("Nueva Venta")
-                # Aquí implementaremos el formulario para registrar una nueva venta
-                with st.form("form_registrar_venta"):
-                    fecha_venta = st.date_input("Fecha de la venta")
-                    id_canal = st.selectbox("Canal de venta", ["1 - Online", "2 - Presencial"])  # Ejemplo, ajustar con datos reales
-                    id_forma_pago = st.selectbox("Forma de pago", ["1 - Efectivo", "2 - Tarjeta", "3 - Transferencia"])  # Ejemplo
-                    id_forma_entrega = st.selectbox("Forma de entrega", ["1 - Envío", "2 - Retiro en tienda"])  # Ejemplo
-                    descuento = st.number_input("Descuento (%)", min_value=0.0, step=0.01)
-                    comision = st.number_input("Comisión (%)", min_value=0.0, step=0.01)
-                    impuestos = st.number_input("Impuestos (%)", min_value=0.0, step=0.01)
-                    costo_envio = st.number_input("Costo de envío", min_value=0.0, step=0.01)
-                    monto_total = st.number_input("Monto total", min_value=0.0, step=0.01)
-                    facturada = st.checkbox("¿Facturada?")
-                    nombre_cliente = st.text_input("Nombre del cliente")
-                    mail_cliente = st.text_input("Correo electrónico del cliente")
-                    telefono_cliente = st.text_input("Teléfono del cliente")
-                    direccion_cliente = st.text_input("Dirección del cliente")
-                    condicion_fiscal = st.text_input("Condición fiscal")
-                    dni_cuit = st.text_input("DNI/CUIT")
-                    creado_por = st.text_input("Creado por")
-                    submit_button = st.form_submit_button("Registrar Venta")
+            col5, col6 = st.columns(2)
+            with col5:
+                st.session_state["venta_data"]["costo_envio"] = st.number_input(
+                    "Costo de envío", value=st.session_state["venta_data"]["costo_envio"]
+                )
+            with col6:
+                st.session_state["venta_data"]["comision"] = st.number_input(
+                    "Comisión", value=st.session_state["venta_data"]["comision"]
+                )
 
-                    if submit_button:
-                        try:
-                            response = supabase.table("ventas").insert({
-                                "fecha_venta": str(fecha_venta),
-                                "id_canal": int(id_canal.split(" - ")[0]),
-                                "id_forma_pago": int(id_forma_pago.split(" - ")[0]),
-                                "id_forma_entrega": int(id_forma_entrega.split(" - ")[0]),
-                                "descuento": descuento,
-                                "comision": comision,
-                                "impuestos": impuestos,
-                                "costo_envio": costo_envio,
-                                "monto_total": monto_total,
-                                "facturada": facturada,
-                                "nombre_cliente": nombre_cliente,
-                                "mail_cliente": mail_cliente,
-                                "telefono_cliente": telefono_cliente,
-                                "direccion_cliente": direccion_cliente,
-                                "condicion_fiscal": condicion_fiscal,
-                                "dni_cuit": dni_cuit,
-                                "creado_por": creado_por
+            col7, col8 = st.columns(2)
+            with col7:
+                st.session_state["venta_data"]["impuestos"] = st.number_input(
+                    "Impuestos", value=st.session_state["venta_data"]["impuestos"]
+                )
+            with col8:
+                st.session_state["venta_data"]["descuento"] = st.number_input(
+                    "Descuento", value=st.session_state["venta_data"]["descuento"]
+                )
+
+            col9, col10 = st.columns(2)
+            with col9:
+                st.session_state["venta_data"]["nombre_cliente"] = st.text_input(
+                    "Nombre del cliente", value=st.session_state["venta_data"]["nombre_cliente"]
+                )
+            with col10:
+                st.session_state["venta_data"]["mail_cliente"] = st.text_input(
+                    "Correo electrónico", value=st.session_state["venta_data"]["mail_cliente"]
+                )
+
+            col11, col12 = st.columns(2)
+            with col11:
+                st.session_state["venta_data"]["telefono_cliente"] = st.text_input(
+                    "Teléfono", value=st.session_state["venta_data"]["telefono_cliente"]
+                )
+            with col12:
+                st.session_state["venta_data"]["direccion_cliente"] = st.text_input(
+                    "Dirección", value=st.session_state["venta_data"]["direccion_cliente"]
+                )
+
+            col13, col14 = st.columns(2)
+            with col13:
+                st.session_state["venta_data"]["condicion_fiscal"] = st.text_input(
+                    "Condición fiscal", value=st.session_state["venta_data"]["condicion_fiscal"]
+                )
+            with col14:
+                st.session_state["venta_data"]["dni_cuit"] = st.text_input(
+                    "DNI/CUIT", value=st.session_state["venta_data"]["dni_cuit"]
+                )
+
+            st.session_state["venta_data"]["facturada"] = st.checkbox(
+                "¿Facturada?", value=st.session_state["venta_data"]["facturada"]
+            )
+
+            # Botón para registrar la venta
+            registrar_venta = st.form_submit_button("Registrar venta")
+
+            if registrar_venta:
+                try:
+                    # Insertar en la tabla ventas
+                    venta_data = st.session_state["venta_data"]
+                    venta_data["monto_total"] = sum(p["subtotal"] for p in st.session_state["productos"])
+                    venta_data["estado"] = "aprobada"
+                    venta_insert = supabase.table("ventas").insert(venta_data).execute()
+
+                    if venta_insert.data:
+                        id_venta = venta_insert.data[0]["id_venta"]
+
+                        # Insertar productos asociados
+                        for producto in st.session_state["productos"]:
+                            supabase.table("items_ventas").insert({
+                                "id_venta": id_venta,
+                                "id_producto": producto["id_producto"],
+                                "precio_unitario": producto["precio_unitario"],
+                                "cantidad": producto["cantidad"],
+                                "subtotal": producto["subtotal"]
                             }).execute()
-                            st.success("Venta registrada exitosamente.")
-                            st.session_state["accion"] = None  # Resetear la acción
-                        except Exception as e:
-                            st.error(f"Error al registrar la venta: {e}")
 
-            elif st.session_state["accion"] == "editar":
-                st.title("Editar Venta")
-                venta = st.session_state["venta_seleccionada"]
-                st.write(f"Editar venta ID: {venta['id_venta']}")
-                # Aquí puedes implementar el formulario para editar la venta
+                        st.success("Venta registrada correctamente.")
+                        st.session_state["mostrar_formulario"] = False
+                        st.session_state["productos"] = []  # Limpiar productos
+                    else:
+                        st.error("Error al insertar la venta.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
-            elif st.session_state["accion"] == "eliminar":
-                st.title("Eliminar Venta")
-                venta = st.session_state["venta_seleccionada"]
-                st.write(f"Eliminar venta ID: {venta['id_venta']}")
-                # Aquí puedes implementar la lógica para eliminar la venta
+        # Mostrar los productos ya agregados
+        st.markdown("### Productos añadidos")
+        if st.session_state["productos"]:
+            for i, producto in enumerate(st.session_state["productos"]):
+                cols = st.columns([2, 1, 2, 2])
+                cols[0].text_input("Producto", value=producto["id_producto"], key=f"id_producto_{i}", disabled=True)
+                cols[1].number_input("Cantidad", value=producto["cantidad"], key=f"cantidad_{i}", disabled=True)
+                cols[2].number_input("Precio unitario", value=producto["precio_unitario"], key=f"precio_unitario_{i}", disabled=True)
+                cols[3].markdown(f"Subtotal: **${producto['subtotal']:.2f}**")
+        else:
+            st.info("No se han añadido productos aún.")
 
-    elif menu_principal == "Egresos":
-        st.title("Egresos")
-        st.write("Aquí se implementarán las funciones relacionadas con egresos.")
+        # Formulario para añadir un nuevo producto
+        st.markdown("### Añadir nuevo producto")
+        with st.form("form_agregar_item"):
+            cols = st.columns([2, 1, 2, 2])
+            nuevo_producto = cols[0].text_input("Producto", key="nuevo_producto_input")
+            nueva_cantidad = cols[1].number_input("Cantidad", min_value=1, step=1, key="nueva_cantidad_input")
+            nuevo_precio_unitario = cols[2].number_input("Precio unitario", min_value=0.0, step=0.01, key="nuevo_precio_unitario_input")
+            nuevo_subtotal = nueva_cantidad * nuevo_precio_unitario
+            cols[3].markdown(f"Subtotal: **${nuevo_subtotal:.2f}**")
+
+            # Botón para añadir el ítem
+            form_action = st.form_submit_button("Añadir ítem")
+
+            if form_action:
+                # Validar que el producto no esté vacío
+                if not nuevo_producto.strip():
+                    st.warning("El campo 'Producto' no puede estar vacío.")
+                else:
+                    # Agregar el nuevo producto a la lista de productos
+                    st.session_state["productos"].append({
+                        "id_producto": nuevo_producto,
+                        "cantidad": nueva_cantidad,
+                        "precio_unitario": nuevo_precio_unitario,
+                        "subtotal": nuevo_subtotal
+                    })
+                    st.success("Producto añadido correctamente.")
+
+                    # Forzar la recarga de la página para reflejar los cambios
+                    st.rerun()
+
+elif menu_principal == "Egresos":
+    st.title("Egresos")
+    st.write("Aquí se podrá cargar un egreso.")
