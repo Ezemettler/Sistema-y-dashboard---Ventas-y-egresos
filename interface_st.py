@@ -26,31 +26,31 @@ if menu_principal == "Ventas":
     if st.session_state.get("mostrar_formulario"):
         st.subheader("Registrar nueva venta")
 
+        # Inicializar valores en session_state si no existen
+        if "venta_data" not in st.session_state:
+            st.session_state["venta_data"] = {
+                "fecha_venta": date.today(),
+                "costo_envio": 0,
+                "comision": 0,
+                "impuestos": 0,
+                "descuento": 0,
+                "nombre_cliente": "",
+                "mail_cliente": "",
+                "telefono_cliente": "",
+                "direccion_cliente": "",
+                "condicion_fiscal": "",
+                "dni_cuit": "",
+                "facturada": False,
+                "id_canal": None,
+                "id_forma_pago": None,
+                "id_forma_entrega": None,
+            }
+
+        if "productos" not in st.session_state:
+            st.session_state["productos"] = []
+
         # Formulario principal para registrar la venta
         with st.form("form_nueva_venta"):
-            # Inicializar valores en session_state si no existen
-            if "venta_data" not in st.session_state:
-                st.session_state["venta_data"] = {
-                    "fecha_venta": date.today(),
-                    "costo_envio": 0,
-                    "comision": 0,
-                    "impuestos": 0,
-                    "descuento": 0,
-                    "nombre_cliente": "",
-                    "mail_cliente": "",
-                    "telefono_cliente": "",
-                    "direccion_cliente": "",
-                    "condicion_fiscal": "",
-                    "dni_cuit": "",
-                    "facturada": False,
-                    "id_canal": None,
-                    "id_forma_pago": None,
-                    "id_forma_entrega": None,
-                }
-
-            if "productos" not in st.session_state:
-                st.session_state["productos"] = []
-
             # Campos de la tabla ventas
             col1, col2 = st.columns(2)
             with col1:
@@ -156,15 +156,32 @@ if menu_principal == "Ventas":
                 "¿Facturada?", value=st.session_state["venta_data"]["facturada"]
             )
 
+            # Mostrar los productos ya agregados
+            st.markdown("### Productos añadidos")
+            if st.session_state["productos"]:
+                for i, producto in enumerate(st.session_state["productos"]):
+                    cols = st.columns([2, 1, 2, 2])
+                    cols[0].text_input("Producto", value=producto["id_producto"], key=f"id_producto_{i}", disabled=True)
+                    cols[1].number_input("Cantidad", value=producto["cantidad"], key=f"cantidad_{i}", disabled=True)
+                    cols[2].number_input("Precio unitario", value=producto["precio_unitario"], key=f"precio_unitario_{i}", disabled=True)
+                    cols[3].markdown(f"Subtotal: **${producto['subtotal']:.2f}**")
+            else:
+                st.info("No se han añadido productos aún.")
+
             # Botón para registrar la venta
             registrar_venta = st.form_submit_button("Registrar venta")
 
             if registrar_venta:
                 try:
-                    # Insertar en la tabla ventas
+                    # Convertir la fecha a formato ISO 8601
                     venta_data = st.session_state["venta_data"]
+                    venta_data["fecha_venta"] = venta_data["fecha_venta"].isoformat()  # Convertir a string
+
+                    # Calcular el monto total
                     venta_data["monto_total"] = sum(p["subtotal"] for p in st.session_state["productos"])
                     venta_data["estado"] = "aprobada"
+
+                    # Insertar en la tabla ventas
                     venta_insert = supabase.table("ventas").insert(venta_data).execute()
 
                     if venta_insert.data:
@@ -175,9 +192,9 @@ if menu_principal == "Ventas":
                             supabase.table("items_ventas").insert({
                                 "id_venta": id_venta,
                                 "id_producto": producto["id_producto"],
-                                "precio_unitario": producto["precio_unitario"],
-                                "cantidad": producto["cantidad"],
-                                "subtotal": producto["subtotal"]
+                                "precio_unitario": int(producto["precio_unitario"]),  # Convertir a entero
+                                "cantidad": int(producto["cantidad"]),  # Convertir a entero
+                                "subtotal": int(producto["subtotal"]),  # Convertir a entero
                             }).execute()
 
                         st.success("Venta registrada correctamente.")
@@ -188,25 +205,38 @@ if menu_principal == "Ventas":
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-        # Mostrar los productos ya agregados
-        st.markdown("### Productos añadidos")
-        if st.session_state["productos"]:
-            for i, producto in enumerate(st.session_state["productos"]):
-                cols = st.columns([2, 1, 2, 2])
-                cols[0].text_input("Producto", value=producto["id_producto"], key=f"id_producto_{i}", disabled=True)
-                cols[1].number_input("Cantidad", value=producto["cantidad"], key=f"cantidad_{i}", disabled=True)
-                cols[2].number_input("Precio unitario", value=producto["precio_unitario"], key=f"precio_unitario_{i}", disabled=True)
-                cols[3].markdown(f"Subtotal: **${producto['subtotal']:.2f}**")
-        else:
-            st.info("No se han añadido productos aún.")
-
-        # Formulario para añadir un nuevo producto
+        # Formulario independiente para añadir un nuevo producto
         st.markdown("### Añadir nuevo producto")
         with st.form("form_agregar_item"):
-            cols = st.columns([2, 1, 2, 2])
-            nuevo_producto = cols[0].text_input("Producto", key="nuevo_producto_input")
-            nueva_cantidad = cols[1].number_input("Cantidad", min_value=1, step=1, key="nueva_cantidad_input")
-            nuevo_precio_unitario = cols[2].number_input("Precio unitario", min_value=0.0, step=0.01, key="nuevo_precio_unitario_input")
+            # Ajustamos las proporciones: 4 para producto (más ancho), 1 para cantidad y precio (más estrechos)
+            cols = st.columns([4, 1, 1, 2])
+            
+            # Obtener productos de la base de datos
+            productos = supabase.table("productos").select("id_producto, nombre").execute().data
+            if productos:
+                producto_seleccionado = cols[0].selectbox(
+                    "Producto",
+                    [(p["id_producto"], p["nombre"]) for p in productos],
+                    format_func=lambda x: x[1],  # Mostrar solo el nombre
+                    key="nuevo_producto_input"
+                )
+                id_producto = producto_seleccionado[0]  # Obtener el ID del producto
+            else:
+                st.warning("No hay productos disponibles.")
+                
+            nueva_cantidad = cols[1].number_input(
+                "Cantidad", 
+                min_value=1, 
+                step=1, 
+                key="nueva_cantidad_input"
+            )
+            nuevo_precio_unitario = cols[2].number_input(
+                "Precio unitario",
+                min_value=0,
+                step=1,
+                format="%d",
+                key="nuevo_precio_unitario_input"
+            )
             nuevo_subtotal = nueva_cantidad * nuevo_precio_unitario
             cols[3].markdown(f"Subtotal: **${nuevo_subtotal:.2f}**")
 
@@ -214,21 +244,18 @@ if menu_principal == "Ventas":
             form_action = st.form_submit_button("Añadir ítem")
 
             if form_action:
-                # Validar que el producto no esté vacío
-                if not nuevo_producto.strip():
-                    st.warning("El campo 'Producto' no puede estar vacío.")
+                # Validar que se haya seleccionado un producto
+                if not producto_seleccionado:
+                    st.warning("Debe seleccionar un producto.")
                 else:
                     # Agregar el nuevo producto a la lista de productos
                     st.session_state["productos"].append({
-                        "id_producto": nuevo_producto,
-                        "cantidad": nueva_cantidad,
-                        "precio_unitario": nuevo_precio_unitario,
-                        "subtotal": nuevo_subtotal
+                        "id_producto": id_producto,  # Guardar el ID del producto
+                        "cantidad": int(nueva_cantidad),
+                        "precio_unitario": int(nuevo_precio_unitario),
+                        "subtotal": int(nueva_cantidad * nuevo_precio_unitario),
                     })
                     st.success("Producto añadido correctamente.")
-
-                    # Forzar la recarga de la página para reflejar los cambios
-                    st.rerun()
 
 elif menu_principal == "Egresos":
     st.title("Egresos")
