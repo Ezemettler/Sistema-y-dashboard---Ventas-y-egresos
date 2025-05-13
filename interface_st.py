@@ -159,9 +159,16 @@ if menu_principal == "Ventas":
             # Mostrar los productos ya agregados
             st.markdown("### Productos añadidos")
             if st.session_state["productos"]:
+                # Obtener todos los productos de la base de datos para mapear ID -> nombre
+                productos_db = supabase.table("productos").select("id_producto, nombre").execute().data
+                # Crear diccionario de mapeo id_producto -> nombre
+                productos_dict = {p["id_producto"]: p["nombre"] for p in productos_db}
+                
                 for i, producto in enumerate(st.session_state["productos"]):
                     cols = st.columns([2, 1, 2, 2])
-                    cols[0].text_input("Producto", value=producto["id_producto"], key=f"id_producto_{i}", disabled=True)
+                    # Mostrar el nombre del producto en lugar del ID
+                    nombre_producto = productos_dict.get(producto["id_producto"], "Producto no encontrado")
+                    cols[0].text_input("Producto", value=nombre_producto, key=f"id_producto_{i}", disabled=True)
                     cols[1].number_input("Cantidad", value=producto["cantidad"], key=f"cantidad_{i}", disabled=True)
                     cols[2].number_input("Precio unitario", value=producto["precio_unitario"], key=f"precio_unitario_{i}", disabled=True)
                     cols[3].markdown(f"Subtotal: **${producto['subtotal']:.2f}**")
