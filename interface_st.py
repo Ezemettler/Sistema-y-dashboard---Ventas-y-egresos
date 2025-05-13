@@ -255,7 +255,8 @@ if menu_principal == "Ventas":
                         "precio_unitario": int(nuevo_precio_unitario),
                         "subtotal": int(nueva_cantidad * nuevo_precio_unitario),
                     })
-                    st.success("Producto añadido correctamente.")
+                    # Forzar la recarga de la página para mostrar el producto agregado inmediatamente
+                    st.rerun()
 
 elif menu_principal == "Egresos":
     st.title("Egresos")
