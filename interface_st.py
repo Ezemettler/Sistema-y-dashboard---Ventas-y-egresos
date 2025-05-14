@@ -161,17 +161,28 @@ if menu_principal == "Ventas":
             if st.session_state["productos"]:
                 # Obtener todos los productos de la base de datos para mapear ID -> nombre
                 productos_db = supabase.table("productos").select("id_producto, nombre").execute().data
-                # Crear diccionario de mapeo id_producto -> nombre
                 productos_dict = {p["id_producto"]: p["nombre"] for p in productos_db}
                 
+                # Crear encabezados de columnas con más espacio para producto
+                cols_header = st.columns([4, 1, 1, 1])
+                cols_header[0].markdown("**Producto**")
+                cols_header[1].markdown("**Cantidad**")
+                cols_header[2].markdown("**Precio**")
+                cols_header[3].markdown("**Subtotal**")
+                
                 for i, producto in enumerate(st.session_state["productos"]):
-                    cols = st.columns([2, 1, 2, 2])
+                    cols = st.columns([4, 1, 1, 1])
                     # Mostrar el nombre del producto en lugar del ID
                     nombre_producto = productos_dict.get(producto["id_producto"], "Producto no encontrado")
-                    cols[0].text_input("Producto", value=nombre_producto, key=f"id_producto_{i}", disabled=True)
-                    cols[1].number_input("Cantidad", value=producto["cantidad"], key=f"cantidad_{i}", disabled=True)
-                    cols[2].number_input("Precio unitario", value=producto["precio_unitario"], key=f"precio_unitario_{i}", disabled=True)
-                    cols[3].markdown(f"Subtotal: **${producto['subtotal']:.2f}**")
+                    cols[0].text_input("", value=nombre_producto, key=f"id_producto_{i}", disabled=True)
+                    cols[1].text_input("", value=str(producto["cantidad"]), key=f"cantidad_{i}", disabled=True)
+                    cols[2].text_input("", value=f"${producto['precio_unitario']}", key=f"precio_unitario_{i}", disabled=True)
+                    cols[3].text_input("", value=f"${producto['subtotal']}", key=f"subtotal_{i}", disabled=True)
+                
+                # Calcular y mostrar el total alineado con la columna de subtotal
+                total = sum(p["subtotal"] for p in st.session_state["productos"])
+                cols_total = st.columns([5, 2])
+                cols_total[1].markdown(f"<h2 style='color: #ffffff; margin: 0;'>Total: ${total}</h2>", unsafe_allow_html=True)
             else:
                 st.info("No se han añadido productos aún.")
 
@@ -216,7 +227,7 @@ if menu_principal == "Ventas":
         st.markdown("### Añadir nuevo producto")
         with st.form("form_agregar_item"):
             # Ajustamos las proporciones: 4 para producto (más ancho), 1 para cantidad y precio (más estrechos)
-            cols = st.columns([4, 1, 1, 2])
+            cols = st.columns([4, 1, 1])
             
             # Obtener productos de la base de datos
             productos = supabase.table("productos").select("id_producto, nombre").execute().data
@@ -244,8 +255,6 @@ if menu_principal == "Ventas":
                 format="%d",
                 key="nuevo_precio_unitario_input"
             )
-            nuevo_subtotal = nueva_cantidad * nuevo_precio_unitario
-            cols[3].markdown(f"Subtotal: **${nuevo_subtotal:.2f}**")
 
             # Botón para añadir el ítem
             form_action = st.form_submit_button("Añadir ítem")
@@ -256,11 +265,12 @@ if menu_principal == "Ventas":
                     st.warning("Debe seleccionar un producto.")
                 else:
                     # Agregar el nuevo producto a la lista de productos
+                    nuevo_subtotal = int(nueva_cantidad * nuevo_precio_unitario)
                     st.session_state["productos"].append({
                         "id_producto": id_producto,  # Guardar el ID del producto
                         "cantidad": int(nueva_cantidad),
                         "precio_unitario": int(nuevo_precio_unitario),
-                        "subtotal": int(nueva_cantidad * nuevo_precio_unitario),
+                        "subtotal": nuevo_subtotal,
                     })
                     # Forzar la recarga de la página para mostrar el producto agregado inmediatamente
                     st.rerun()
