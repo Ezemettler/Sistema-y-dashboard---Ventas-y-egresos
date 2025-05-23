@@ -159,35 +159,79 @@ if menu_principal == "Ventas":
             # Mostrar los productos ya agregados
             st.markdown("### Productos añadidos")
             if st.session_state["productos"]:
-                # Obtener todos los productos de la base de datos para mapear ID -> nombre
                 productos_db = supabase.table("productos").select("id_producto, nombre").execute().data
                 productos_dict = {p["id_producto"]: p["nombre"] for p in productos_db}
                 
-                # Crear encabezados de columnas con más espacio para producto
-                cols_header = st.columns([4, 1, 1, 1])
-                cols_header[0].markdown("**Producto**")
-                cols_header[1].markdown("**Cantidad**")
-                cols_header[2].markdown("**Precio**")
-                cols_header[3].markdown("**Subtotal**")
+                # Crear encabezados de columnas
+                cols_header = st.columns([0.3, 4, 1, 1, 1])
+                cols_header[0].markdown("**✓**")  # Checkbox header
+                cols_header[1].markdown("**Producto**")
+                cols_header[2].markdown("**Cantidad**")
+                cols_header[3].markdown("**Precio**")
+                cols_header[4].markdown("**Subtotal**")
+                
+                productos_a_eliminar = []
+                
+                # Estilo CSS para alinear el checkbox
+                st.markdown("""
+                    <style>
+                        /* Contenedor del checkbox */
+                        div[data-testid="column"] > div[data-testid="stCheckbox"] {
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin-top: 1.7rem;  /* Ajuste fino de la posición vertical */
+                            padding: 0;
+                            height: 2.5rem;
+                        }
+                        /* Etiqueta del checkbox */
+                        div[data-testid="stCheckbox"] > label {
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin: 0;
+                            padding: 0;
+                        }
+                        /* Input del checkbox */
+                        div[data-testid="stCheckbox"] input {
+                            margin: 0;
+                            padding: 0;
+                        }
+                    </style>
+                """, unsafe_allow_html=True)
                 
                 for i, producto in enumerate(st.session_state["productos"]):
-                    cols = st.columns([4, 1, 1, 1])
-                    # Mostrar el nombre del producto en lugar del ID
+                    cols = st.columns([0.3, 4, 1, 1, 1])
+                    # Checkbox sin espaciador
+                    if cols[0].checkbox("", key=f"seleccionar_{i}", label_visibility="collapsed"):
+                        productos_a_eliminar.append(i)
+                    
+                    # Mostrar información del producto
                     nombre_producto = productos_dict.get(producto["id_producto"], "Producto no encontrado")
-                    cols[0].text_input("", value=nombre_producto, key=f"id_producto_{i}", disabled=True)
-                    cols[1].text_input("", value=str(producto["cantidad"]), key=f"cantidad_{i}", disabled=True)
-                    cols[2].text_input("", value=f"${producto['precio_unitario']}", key=f"precio_unitario_{i}", disabled=True)
-                    cols[3].text_input("", value=f"${producto['subtotal']}", key=f"subtotal_{i}", disabled=True)
+                    cols[1].text_input("", value=nombre_producto, key=f"id_producto_{i}", disabled=True)
+                    cols[2].text_input("", value=str(producto["cantidad"]), key=f"cantidad_{i}", disabled=True)
+                    cols[3].text_input("", value=f"${producto['precio_unitario']}", key=f"precio_unitario_{i}", disabled=True)
+                    cols[4].text_input("", value=f"${producto['subtotal']}", key=f"subtotal_{i}", disabled=True)
                 
-                # Calcular y mostrar el total alineado con la columna de subtotal
+                # Calcular y mostrar el total
                 total = sum(p["subtotal"] for p in st.session_state["productos"])
+                st.markdown("---")
                 cols_total = st.columns([5, 2])
                 cols_total[1].markdown(f"<h2 style='color: #ffffff; margin: 0;'>Total: ${total}</h2>", unsafe_allow_html=True)
+                
+                # Botones de acción
+                cols_buttons = st.columns([1, 1])
+                eliminar = cols_buttons[0].form_submit_button("🗑️ Eliminar seleccionados")
+                registrar_venta = cols_buttons[1].form_submit_button("💾 Registrar venta")
+                
+                # Procesar eliminación si se presionó el botón
+                if eliminar and productos_a_eliminar:
+                    for idx in sorted(productos_a_eliminar, reverse=True):
+                        st.session_state["productos"].pop(idx)
+                    st.rerun()
             else:
                 st.info("No se han añadido productos aún.")
-
-            # Botón para registrar la venta
-            registrar_venta = st.form_submit_button("Registrar venta")
+                registrar_venta = st.form_submit_button("Registrar venta")
 
             if registrar_venta:
                 try:
