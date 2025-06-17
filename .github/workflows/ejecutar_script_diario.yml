@@ -1,0 +1,39 @@
+name: Ejecutar script diario
+
+on:
+  schedule:
+    - cron: "0 12 * * *"  # Ejecuta todos los días a las 9:00 Argentina (12:00 UTC)
+  workflow_dispatch:      # Permite ejecutarlo manualmente desde la interfaz
+
+jobs:
+  run-python-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Crear archivo .env
+        run: |
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> .env
+          echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+          echo "GOOGLE_CREDS_JSON=${{ secrets.GOOGLE_CREDS_JSON }}" >> .env
+          echo "SPREADSHEET_ID=${{ secrets.SPREADSHEET_ID }}" >> .env
+
+      - name: Crear archivo de credenciales de Google
+        run: |
+          echo "${{ secrets.GOOGLE_CREDS_JSON_FILE }}" > creds.json
+
+      - name: Ejecutar script
+        run: python exportar_vistas_supabase.py
